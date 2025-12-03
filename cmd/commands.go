@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/abhiramjoshi/cred-helper-go/internal"
+	"github.com/abhiramjoshi/cred-helper-go/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -9,10 +12,12 @@ var login = &cobra.Command{
 	Use: "login",
 	Short: "Initiate auth flow to generate JWT for authorization",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		logger := config.GetLogger(cmd.Context())
 		openid, err := cmd.Flags().GetBool("openid")
 		if err != nil {return err}
 		err = internal.Login(cmd.Context(), openid)
 		if err != nil {
+			logger.Error(fmt.Sprint(err))
 			return err
 		}
 		return nil

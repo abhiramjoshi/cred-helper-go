@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -11,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/abhiramjoshi/cred-helper-go/pkg/config"
 )
 
 type AuthResponse struct {
@@ -79,9 +82,10 @@ func generateCodeChallenge() (string, string, error) {
 
 // generateNonce generates a
 
-func authorize(reqUrl string, clientId string, openid bool) (*AuthSession, error) {
+func authorize(ctx context.Context, reqUrl string, clientId string, openid bool) (*AuthSession, error) {
 	// Need to contact the server with code challenge, then get the code in response, and then return the code
 	var authSession AuthSession
+	logger := config.GetLogger(ctx)
 
 	_, nonce, err := generateCodeChallenge()
 	if err != nil {
@@ -99,6 +103,7 @@ func authorize(reqUrl string, clientId string, openid bool) (*AuthSession, error
 	} else {
 		data.Set("scopes", "read write")
 	}
+	logger.Debug("Sending authorization request to %s with parameters: %v", reqUrl, data)
 
 	req, err := http.NewRequest(http.MethodPost, reqUrl, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -136,14 +141,17 @@ func requestToken() error {
 	return nil
 }
 
-func poll(reqUrl string, deviceCode string, clientId string, nonce string) (bool, *PollResponse, error) {
+func poll(ctx context.Context, reqUrl string, deviceCode string, clientId string, nonce string) (bool, *PollResponse, error) {
+	logger := config.GetLogger(ctx)
 	data := url.Values{}
 	data.Set("client_id", clientId)
 	data.Set("device_code", deviceCode)
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-
+	
+	logger.Debug("Sending authorization request to %s with parameters: %v", reqUrl, data)
 	req, err := http.NewRequest(http.MethodPost, reqUrl, strings.NewReader(data.Encode()))
 	if err != nil {
+		logger.Debug("There was an error forming request object")
 		return false, nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -153,6 +161,7 @@ func poll(reqUrl string, deviceCode string, clientId string, nonce string) (bool
 	// fmt.Printf("Request data: %s", d)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		logger.Debug("There was an error sending request")
 		return false, nil, err
 	}
 	defer resp.Body.Close()

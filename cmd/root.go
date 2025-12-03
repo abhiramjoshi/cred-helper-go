@@ -3,21 +3,23 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/abhiramjoshi/cred-helper-go/pkg/vars"
+	"time"
+
 	"github.com/abhiramjoshi/cred-helper-go/pkg/config"
+	"github.com/abhiramjoshi/cred-helper-go/pkg/vars"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	verbose bool
+	verbose     bool
 	environment string
-	cfgFile string
-	Cfg config.Config
+	cfgFile     string
+	Cfg         config.Config
 	rootCommand *cobra.Command
 )
 
@@ -32,28 +34,56 @@ func init() {
 		panic("Invalid CLI configuration, command name not set")
 	}
 	rootCommand = &cobra.Command{
-		Use: vars.CliCommand,
+		Use:   vars.CliCommand,
 		Short: fmt.Sprintf("%s - Generate credentials for %s", vars.CliCommand, vars.CliCommand),
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			initConfig()
 			if verbose {
 				fmt.Fprintf(os.Stderr, "Using config: %s\n", viper.ConfigFileUsed())
 			}
-			flags := log.LstdFlags
+			logLevel := slog.LevelWarn
 			if Cfg.Verbose {
-				flags |= log.Lshortfile
+				logLevel = slog.LevelDebug
 			}
-			logger := log.New(os.Stderr, fmt.Sprintf("[%s]", vars.CliCommand), flags)
-			
-			ctx := context.WithValue(cmd.Context(), config.LoggerKey , logger)	
+			handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+				Level: logLevel,
+				ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+					// If it's the time key, format it like the standard log package
+					if a.Key == slog.TimeKey {
+						// This formats the time as "2006/01/02 15:04:05" (Date Time)
+						t := a.Value.Any().(time.Time)
+						a.Value = slog.StringValue(t.Format("2006/01/02 15:04:05"))
+					}
+
+					// If it's the message key, prepend the command name
+					if a.Key == slog.MessageKey {
+						// Prepend the command prefix
+						a.Value = slog.StringValue(fmt.Sprintf("[%s] %s", vars.CliCommand, a.Value.String()))
+					}
+
+					// If AddSource is true, the source key (file:line) is added.
+					// We will leave the source key name as 'source' for clarity.
+
+					return a
+				},
+			})
+			logger := slog.New(handler)
+			slog.SetDefault(logger)
+			ctx := context.WithValue(cmd.Context(), config.LoggerKey, logger)
+			ctx = context.WithValue(ctx, config.HandlerKey, handler)
 			ctx = context.WithValue(ctx, config.ConfigKey, Cfg)
 			cmd.SetContext(ctx)
 			return nil
 		},
 	}
-	cobra.OnInitialize(initConfig)	
+	// cobra.OnInitialize(initConfig)
 	rootCommand.PersistentFlags().StringVar(&cfgFile, "config", "", fmt.Sprintf("Config file (default $XDG_CONFIG_HOME/%s/config.yaml)", vars.CliCommand))
 	rootCommand.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
-	rootCommand.PersistentFlags().StringVarP(&environment, "environment", "env", "dev", "Environment to use")
+	rootCommand.PersistentFlags().StringVarP(&environment, "env", "e", "dev", "Environment to use")
+
+	viper.BindPFlag("config", rootCommand.PersistentFlags().Lookup("config"))
+	viper.BindPFlag("verbose", rootCommand.PersistentFlags().Lookup("verbose"))
+	viper.BindPFlag("env", rootCommand.PersistentFlags().Lookup("env"))
 
 	viper.SetEnvPrefix(strings.ToUpper(vars.CliCommand))
 	viper.AutomaticEnv()
@@ -74,44 +104,28 @@ func initConfig() {
 	}
 
 	_ = viper.ReadInConfig()
-	
-	
-	baseUrl, ok := vars.UrlMap[viper.GetString("environment")]
+
+	baseUrl, ok := vars.UrlMap[viper.GetString("env")]
 	if !ok {
-		log.Fatalf("Unsupported value specified for --environment flag")
+		slog.Error(fmt.Sprintf("Unsupported value specified for --environment flag. Provided flag was %s. Valid option include [dev, prod]", viper.GetString("env")))
 		os.Exit(1)
 	}
 
 	if vars.AuthorizationEndpoint == "" {
-		log.Fatalf("Unsupported value specified for --environment flag")
+		slog.Error("No Authorization URL has been set")
 		os.Exit(1)
 	}
 
 	if vars.TokenEndpoint == "" {
-		log.Fatalf("Unsupported value specified for --environment flag")
+		slog.Error("No Token URL has been set")
 		os.Exit(1)
 	}
 
 	Cfg = config.Config{
-		Verbose: viper.GetBool("verbose"),
-		BaseURL: baseUrl,
-		AuthEndpoint: vars.AuthorizationEndpoint,
+		Verbose:       viper.GetBool("verbose"),
+		BaseURL:       baseUrl,
+		ClientId:      vars.ClientId,
+		AuthEndpoint:  vars.AuthorizationEndpoint,
 		TokenEndpoint: vars.TokenEndpoint,
 	}
-}
-
-func GetLogger(ctx context.Context) *log.Logger {
-	logger, ok := ctx.Value(config.LoggerKey).(*log.Logger)
-	if !ok {
-		return log.New(os.Stderr, fmt.Sprintf("[%s]", vars.CliCommand), log.LstdFlags)
-	}
-	return logger
-}
-
-func GetConfig(ctx context.Context) *config.Config {
-	cfg, ok := ctx.Value(config.ConfigKey).(*config.Config)
-	if !ok {
-		return &config.Config{}
-	}
-	return cfg
 }
