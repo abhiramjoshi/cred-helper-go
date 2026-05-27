@@ -13,12 +13,12 @@ import (
 
 // ANSI Color Codes:
 const (
-    ColorReset  = "\033[0m"
-    ColorRed    = "\033[31m"
-    ColorGreen  = "\033[32m"
-    ColorYellow = "\033[33m"
-    ColorBlue   = "\033[34m"
-    StyleBold   = "\033[1m"
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	StyleBold   = "\033[1m"
 )
 
 func Login(ctx context.Context, openid bool) error {
@@ -31,13 +31,13 @@ func Login(ctx context.Context, openid bool) error {
 	}
 	// display auth link
 	fmt.Printf("\n--- Device Verification Required ---\n")
-	fmt.Printf("🌐 Please visit %s%s%s to validate this device.\n", ColorBlue, authSession.Response.VerificationUri, ColorReset)
-  fmt.Printf("🔑 Enter User Code: %s%s%s in the link above.\n", StyleBold, authSession.Response.UserCode, ColorReset)
+	fmt.Printf("🌐 Please visit %s%s%s%s to validate this device.\n", ColorBlue, cfg.BaseURL, authSession.Response.VerificationUri, ColorReset)
+	fmt.Printf("🔑 Enter User Code: %s%s%s in the link above.\n", StyleBold, authSession.Response.UserCode, ColorReset)
 	fmt.Printf("----------------------------------\n\n")
 	// poll
 	var finalResponse *PollResponse
-	pollUrl := cfg.BaseURL + cfg.TokenEndpoint	
-	for { 
+	pollUrl := cfg.BaseURL + cfg.TokenEndpoint
+	for {
 		ok, pollResponse, err := poll(ctx, pollUrl, authSession.Response.DeviceCode, cfg.ClientId, authSession.Nonce)
 		if ok {
 			finalResponse = pollResponse
@@ -46,7 +46,7 @@ func Login(ctx context.Context, openid bool) error {
 		if err != nil {
 			return err
 		}
-		time.Sleep(1*time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	//
 	fmt.Printf("🔑 Your Token:\n")
@@ -57,7 +57,7 @@ func Login(ctx context.Context, openid bool) error {
 	err = os.MkdirAll(tokenDir, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("Error saving token locally: %s", err)
-	}	
+	}
 	f, err := os.Create(tokenFile)
 	if err != nil {
 		return fmt.Errorf("Error saving token locally: %s", err)

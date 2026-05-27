@@ -147,7 +147,7 @@ func poll(ctx context.Context, reqUrl string, deviceCode string, clientId string
 	data.Set("client_id", clientId)
 	data.Set("device_code", deviceCode)
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-	
+
 	logger.Debug("Sending authorization request to %s with parameters: %v", reqUrl, data)
 	req, err := http.NewRequest(http.MethodPost, reqUrl, strings.NewReader(data.Encode()))
 	if err != nil {
